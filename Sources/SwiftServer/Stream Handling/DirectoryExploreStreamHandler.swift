@@ -4,6 +4,7 @@ public final class DirectoryExploreStreamHandler: StreamHandling {
     enum Error: Swift.Error {
         case inputStreamFinishedBeforeCompleteHeader
         case notSupportedProtocol
+        case failToOpenFile
     }
 
     public struct Request {
@@ -24,10 +25,9 @@ public final class DirectoryExploreStreamHandler: StreamHandling {
         Task {
             do {
                 let request = try await parseRequest(input: input)
-                guard request.headerInfo.protocol.starts(with: "HTTP") else {
-                    throw Error.notSupportedProtocol
-                }
-                try await outputWriter.write(data: [UInt8](getResponse(request: request)))
+                let (fileHandle, fileMimeType, fileSize) = try await fileAttributes(for: request)
+                let responseHeader = try await getResponseHeader(mimeType: fileMimeType, fileSize: fileSize)
+                try await stream(headerData: responseHeader, file: fileHandle, to: outputWriter)
                 outputWriter.finish()
             } catch {
                 await respond(with: error, writer: outputWriter)
@@ -48,28 +48,42 @@ public final class DirectoryExploreStreamHandler: StreamHandling {
         guard case .ready(let headerInfo) = headerParser.state else {
             throw Error.inputStreamFinishedBeforeCompleteHeader
         }
+        guard headerInfo.protocol.starts(with: "HTTP") else {
+            throw Error.notSupportedProtocol
+        }
         return Request(headerInfo: headerInfo, body: bodyData)
     }
 
-    private func getResponse(request: Request) async throws -> Data {
+    private func stream(headerData: Data, file: FileHandle, to writer: AsyncOutputWriter) async throws {
+        let fileData = try file.read(upToCount: outputBufferSize - headerData.count) ?? Data()
+        try await writer.write(data: [UInt8](headerData + fileData))
+
+        while let data = try file.read(upToCount: outputBufferSize) {
+            try await writer.write(data: [UInt8](data))
+        }
+    }
+
+    private func fileAttributes(for request: Request) async throws -> (FileHandle, mimeType: String, size: Int) {
         let fileURL = try await fileProvider(request)
-        guard FileManager.default.fileExists(atPath: fileURL.pathExtension) else {
+        guard FileManager.default.fileExists(atPath: fileURL.path),
+              let size = try fileURL.resourceValues(forKeys: [.fileSizeKey]).fileSize
+        else {
             throw HttpError(status: .notFound)
         }
 
-        let body = """
+        guard let handle = FileHandle(forReadingAtPath: fileURL.path) else {
+            throw Error.failToOpenFile
+        }
+        return (handle, fileURL.mimeType, size)
+    }
 
-        """
-
-        let contentType = ""
+    private func getResponseHeader(mimeType: String, fileSize: Int) async throws -> Data {
         let response = """
         HTTP/1.1 \(HTTPStatus.ok.code) \(HTTPStatus.ok.message)
         \(HttpHeaderKey.server): Swift Server
         \(HttpHeaderKey.connection): close
-        \(HttpHeaderKey.contentType): \(contentType)
-        \(HttpHeaderKey.contentLength): \(body.count)
-
-        \(body)
+        \(HttpHeaderKey.contentType): \(mimeType)
+        \(HttpHeaderKey.contentLength): \(fileSize)\r\n\r\n
         """
         return response.data(using: .utf8)!
     }
@@ -85,6 +99,9 @@ public final class DirectoryExploreStreamHandler: StreamHandling {
         HTTP/1.1 \(httpError.status.code) \(httpError.status.message)
         \(HttpHeaderKey.server): Swift Server
         \(HttpHeaderKey.connection): close
+        \(HttpHeaderKey.date): \(Date())
+        \(HttpHeaderKey.contentType): text/html;charset=utf-8
+        \(HttpHeaderKey.contentLength): 0\r\n\r\n
         """
         let data = Data(response.utf8)
         do {

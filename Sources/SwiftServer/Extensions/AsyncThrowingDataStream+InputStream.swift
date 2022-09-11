@@ -20,10 +20,15 @@ extension AsyncThrowingDataStream {
                 continuation.finish()
             }
             let delegate = StreamDelegateHandler<InputType>()
-            delegate.eventUpdateClosure = { [weak queue] stream, event in
+            delegate.eventUpdateClosure = { stream, event in
                 switch event {
+                case Stream.Event.openCompleted:
+                    queue.async {
+                        read(stream)
+                    }
+
                 case Stream.Event.hasBytesAvailable:
-                    queue?.async {
+                    queue.async {
                         read(stream)
                     }
 
@@ -45,9 +50,6 @@ extension AsyncThrowingDataStream {
             inputStream.delegate = delegate
             inputStream.schedule(in: .current, forMode: .common)
             inputStream.open()
-            queue.async {
-                read(inputStream)
-            }
         }
     }
 }

@@ -72,8 +72,8 @@ extension HTTPStatus: ExpressibleByIntegerLiteral {
             try self.init(code: integerLiteral)
         } catch {
             assertionFailure("Failed to initialize HTTPStatus from \(integerLiteral), \(error)")
+            self = .ok
         }
-        self = .ok
     }
 }
 
