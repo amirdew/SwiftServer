@@ -7,16 +7,16 @@ public struct RequestHeaderInfo {
         static let headerKeyValueSeparator = ": "
     }
 
-    enum Error: Swift.Error {
+    public enum Error: Swift.Error {
         case notValidRequestLine
     }
 
-    let method: HttpMethod
-    let path: String
-    let `protocol`: String
-    var headers: [HttpHeaderKey: String]
+    public let method: HttpMethod
+    public let path: String
+    public let `protocol`: String
+    public var headers: [HttpHeaderKey: String]
 
-    init(data: [UInt8]) throws {
+    public init(data: [UInt8]) throws {
         let header = String(decoding: data, as: UTF8.self)
         var headerLines = header.components(separatedBy: Constants.separator)
         guard let requestLine = headerLines.first else {
