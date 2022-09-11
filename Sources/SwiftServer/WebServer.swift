@@ -17,6 +17,8 @@ public final class WebServer {
         guard socket == nil else {
             throw Error.alreadyRunning
         }
+        // check socket status and restart if needed.
+        // 
         socket = Socket(address: address, port: port)
         try socket?.start()
 
@@ -36,8 +38,7 @@ public final class WebServer {
     }
 
     private func serve(input: InputStream, output: OutputStream) {
-        let inputBufferSize = type(of: streamHandler).inputBufferSize
-        let inputStream = AsyncThrowingStream(inputStream: input, bufferSize: inputBufferSize)
+        let inputStream = AsyncThrowingStream(inputStream: input, bufferSize: streamHandler.inputBufferSize)
         streamHandler.handle(input: inputStream, outputWriter: output.writer)
     }
 

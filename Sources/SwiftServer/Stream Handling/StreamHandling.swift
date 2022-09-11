@@ -8,6 +8,6 @@ public protocol AsyncOutputWriter {
 }
 
 public protocol StreamHandling {
-    static var inputBufferSize: Int { get }
+    var inputBufferSize: Int { get }
     func handle(input: AsyncThrowingDataStream, outputWriter: AsyncOutputWriter)
 }

@@ -8,9 +8,14 @@ public struct HttpMethod: RawRepresentable {
     }
 
     static let get: HttpMethod = "GET"
+    static let head: HttpMethod = "HEAD"
+    static let connect: HttpMethod = "CONNECT"
+    static let options: HttpMethod = "OPTIONS"
+    static let trace: HttpMethod = "TRACE"
     static let post: HttpMethod = "POST"
     static let put: HttpMethod = "PUT"
     static let delete: HttpMethod = "DELETE"
+    static let patch: HttpMethod = "PATCH"
 }
 
 extension HttpMethod: ExpressibleByStringLiteral {

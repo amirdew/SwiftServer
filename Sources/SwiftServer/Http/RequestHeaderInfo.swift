@@ -1,9 +1,10 @@
 import Foundation
 
-struct RequestHeaderInfo {
+public struct RequestHeaderInfo {
     private enum Constants {
         static let separator = "\r\n"
         static let requestLineSeparator = " "
+        static let headerKeyValueSeparator = ": "
     }
 
     enum Error: Swift.Error {
@@ -32,7 +33,7 @@ struct RequestHeaderInfo {
         headerLines = Array(headerLines.dropFirst())
         var headers: [HttpHeaderKey: String] = [:]
         headerLines.forEach { headerLine in
-            let headerLineComponents = headerLine.components(separatedBy: Constants.separator)
+            let headerLineComponents = headerLine.components(separatedBy: Constants.headerKeyValueSeparator)
             guard headerLineComponents.count == 2 else { return }
             headers[.init(rawValue: headerLineComponents[0])] = headerLineComponents[1]
         }

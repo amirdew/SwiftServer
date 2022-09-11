@@ -10,10 +10,6 @@ struct HttpHeaderParser {
         static let headerBodySeparator = Data("\r\n\r\n".utf8)
     }
 
-    enum Error: Swift.Error {
-        case maxSizeReached
-    }
-
     var maxHeaderSize: Int = 8 * 1024
 
     private(set) var state: State = .moreDataNeeded
@@ -23,7 +19,7 @@ struct HttpHeaderParser {
         guard case .moreDataNeeded = state else { return }
 
         guard parsedData.count + streamData.count < maxHeaderSize else {
-            throw Error.maxSizeReached
+            throw HttpError(status: .requestHeaderTooLarge)
         }
         parsedData.append(contentsOf: streamData)
         if let range = parsedData.firstRange(of: Constants.headerBodySeparator) {

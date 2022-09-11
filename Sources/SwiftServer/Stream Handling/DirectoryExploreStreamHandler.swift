@@ -3,26 +3,34 @@ import Foundation
 public final class DirectoryExploreStreamHandler: StreamHandling {
     enum Error: Swift.Error {
         case inputStreamFinishedBeforeCompleteHeader
+        case notSupportedProtocol
     }
 
-    struct Request {
+    public struct Request {
         let headerInfo: RequestHeaderInfo
         let body: Data
     }
 
-    public static var inputBufferSize: Int = 240
+    public var inputBufferSize: Int = 1024
+    private var outputBufferSize: Int = 1024 * 1024
 
-    public init() {}
+    private let fileProvider: (Request) async throws -> URL
+
+    public init(fileProvider: @escaping (Request) async throws -> URL) {
+        self.fileProvider = fileProvider
+    }
 
     public func handle(input: AsyncThrowingDataStream, outputWriter: AsyncOutputWriter) {
         Task {
             do {
                 let request = try await parseRequest(input: input)
-                print(request)
+                guard request.headerInfo.protocol.starts(with: "HTTP") else {
+                    throw Error.notSupportedProtocol
+                }
                 try await outputWriter.write(data: [UInt8](getResponse(request: request)))
                 outputWriter.finish()
             } catch {
-                print(error)
+                await respond(with: error, writer: outputWriter)
             }
         }
     }
@@ -43,27 +51,47 @@ public final class DirectoryExploreStreamHandler: StreamHandling {
         return Request(headerInfo: headerInfo, body: bodyData)
     }
 
-    private func getResponse(request: Request) -> Data {
+    private func getResponse(request: Request) async throws -> Data {
+        let fileURL = try await fileProvider(request)
+        guard FileManager.default.fileExists(atPath: fileURL.pathExtension) else {
+            throw HttpError(status: .notFound)
+        }
+
         let body = """
-        <!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01//EN"
-                "http://www.w3.org/TR/html4/strict.dtd">
-        <html>
-            <body>
-                <h1>Response</h1>
-                <p>\(request)</p>
-            </body>
-        </html>
+
         """
 
-        let respond = """
-        HTTP/1.0 200 OK
-        Server: Swift Server
-        Connection: close
-        Content-Type: text/html;charset=utf-8
-        Content-Length: \(body.count)
+        let contentType = ""
+        let response = """
+        HTTP/1.1 \(HTTPStatus.ok.code) \(HTTPStatus.ok.message)
+        \(HttpHeaderKey.server): Swift Server
+        \(HttpHeaderKey.connection): close
+        \(HttpHeaderKey.contentType): \(contentType)
+        \(HttpHeaderKey.contentLength): \(body.count)
 
         \(body)
         """
-        return respond.data(using: .utf8)!
+        return response.data(using: .utf8)!
+    }
+
+    private func respond(with error: Swift.Error, writer: AsyncOutputWriter) async {
+        let httpError: HttpError
+        if let error = error as? HttpError {
+            httpError = error
+        } else {
+            httpError = HttpError(status: .internalServerError, message: error.localizedDescription)
+        }
+        let response = """
+        HTTP/1.1 \(httpError.status.code) \(httpError.status.message)
+        \(HttpHeaderKey.server): Swift Server
+        \(HttpHeaderKey.connection): close
+        """
+        let data = Data(response.utf8)
+        do {
+            try await writer.write(data: [UInt8](data))
+        } catch {
+            assertionFailure("Failed to respond with error")
+        }
+        writer.finish()
     }
 }

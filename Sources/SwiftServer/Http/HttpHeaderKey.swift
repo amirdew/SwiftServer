@@ -7,7 +7,10 @@ public struct HttpHeaderKey: RawRepresentable, Hashable {
         self.rawValue = rawValue.lowercased()
     }
 
-    static let contentType: HttpMethod = "content-type"
+    static let contentType: HttpHeaderKey = "content-type"
+    static let connection: HttpHeaderKey = "connection"
+    static let server: HttpHeaderKey = "server"
+    static let contentLength: HttpHeaderKey = "content-length"
 }
 
 extension HttpHeaderKey: ExpressibleByStringLiteral {
