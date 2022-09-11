@@ -8,8 +8,8 @@ public final class DirectoryExploreStreamHandler: StreamHandling {
     }
 
     public struct Request {
-        let headerInfo: RequestHeaderInfo
-        let body: Data
+        public let headerInfo: RequestHeaderInfo
+        public let body: Data
     }
 
     public var inputBufferSize: Int = 1024
