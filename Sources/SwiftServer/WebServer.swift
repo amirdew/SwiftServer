@@ -7,9 +7,9 @@ public final class WebServer {
 
     private var socket: Socket?
     private var connectionTask: Task<Void, Never>?
-    private var streamHandler: StreamHandling
+    private var streamHandler: () -> StreamHandling
 
-    public init(streamHandler: StreamHandling) {
+    public init(streamHandler: @escaping () -> StreamHandling) {
         self.streamHandler = streamHandler
     }
 
@@ -21,11 +21,11 @@ public final class WebServer {
         // 
         socket = Socket(address: address, port: port)
         try socket?.start()
+        guard let connectionStream = socket?.connectionStream else { return }
 
-        connectionTask = Task(priority: .userInitiated) { @MainActor in
-            guard let connectionStream = socket?.connectionStream else { return }
+        connectionTask = Task.detached(priority: .userInitiated) {
             for await connection in connectionStream {
-                serve(input: connection.input, output: connection.output)
+                await self.serve(input: connection.input, output: connection.output)
             }
         }
     }
@@ -37,9 +37,12 @@ public final class WebServer {
         connectionTask = nil
     }
 
-    private func serve(input: InputStream, output: OutputStream) {
-        let inputStream = AsyncThrowingStream(inputStream: input, bufferSize: streamHandler.inputBufferSize)
-        streamHandler.handle(input: inputStream, outputWriter: output.writer)
+    private var handlers: [StreamHandling] = []
+    
+    private func serve(input: InputStream, output: OutputStream) async {
+        let handler = streamHandler()
+        let inputStream = AsyncThrowingStream(inputStream: input, bufferSize: handler.inputBufferSize)
+        await handler.handle(input: inputStream, outputWriter: output.writer)
     }
 
     deinit {

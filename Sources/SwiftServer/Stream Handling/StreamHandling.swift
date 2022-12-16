@@ -9,5 +9,5 @@ public protocol AsyncOutputWriter {
 
 public protocol StreamHandling {
     var inputBufferSize: Int { get }
-    func handle(input: AsyncThrowingDataStream, outputWriter: AsyncOutputWriter)
+    func handle(input: AsyncThrowingDataStream, outputWriter: AsyncOutputWriter) async
 }

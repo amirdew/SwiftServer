@@ -5,32 +5,23 @@ extension AsyncThrowingDataStream {
         case unknownInputError
     }
 
-    init<InputType: InputStream>(inputStream: InputType, bufferSize: Int) {
+    init(inputStream: InputStream, bufferSize: Int) {
         self = AsyncThrowingDataStream { continuation in
-            let queue = DispatchQueue(label: "AsyncThrowingDataStream.read")
-            let read: (InputType) -> Void = { stream in
-                var buffer: [UInt8] = Array(repeating: 0, count: bufferSize)
-                while stream.read(&buffer, maxLength: bufferSize) > 0 {
-                    continuation.yield(buffer)
-                    buffer = Array(repeating: 0, count: bufferSize)
-                    if !stream.hasBytesAvailable {
-                        break
-                    }
-                }
-                continuation.finish()
+            var isReading = false
+            let read: (InputStream) async -> Void = { stream in
+                guard !isReading else { return }
+                isReading = true
+                await Self.read(from: stream, bufferSize: bufferSize, continuation: continuation)
+                isReading = false
             }
-            let delegate = StreamDelegateHandler<InputType>()
+            let delegate = StreamDelegateHandler<InputStream>()
             delegate.eventUpdateClosure = { stream, event in
                 switch event {
                 case Stream.Event.openCompleted:
-                    queue.async {
-                        read(stream)
-                    }
+                    Task { await read(stream) }
 
                 case Stream.Event.hasBytesAvailable:
-                    queue.async {
-                        read(stream)
-                    }
+                    Task { await read(stream) }
 
                 case Stream.Event.errorOccurred:
                     continuation.finish(throwing: stream.streamError ?? Error.unknownInputError)
@@ -46,10 +37,22 @@ extension AsyncThrowingDataStream {
             continuation.onTermination = { termination in
                 delegate.eventUpdateClosure = nil
                 inputStream.close()
+                inputStream.remove(from: .main, forMode: .common)
             }
             inputStream.delegate = delegate
-            inputStream.schedule(in: .current, forMode: .common)
+            inputStream.schedule(in: .main, forMode: .common)
             inputStream.open()
         }
+    }
+
+    private static func read(from inputStream: InputStream, bufferSize: Int, continuation: Continuation) async {
+        var buffer: [UInt8] = Array(repeating: 0, count: bufferSize)
+        var result = 0
+        repeat {
+            result = inputStream.read(&buffer, maxLength: bufferSize)
+            continuation.yield(buffer)
+            buffer = Array(repeating: 0, count: bufferSize)
+        } while result > 0 && inputStream.hasBytesAvailable
+        continuation.finish()
     }
 }
